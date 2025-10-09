@@ -1,0 +1,209 @@
+import os
+import re
+import sys
+import argparse
+
+# Global Variables
+postings_buffer = []
+temp_file_names = []
+page_table = {}
+document_lengths = {}
+doc_frequency_map = {}
+total_document_length = 0
+total_documents = 0
+
+# Constants
+DEFAULT_MAX_BUFFER_POSTINGS = 1000000
+ASCII_RANGE = set(range(128))
+punctuation_re = re.compile(r"[^\w\s]", flags=re.UNICODE)
+
+def tokenize_text(text):
+    '''
+    Tokenize the input text into a list of ASCII tokens.
+    Non-ASCII tokens are filtered out.
+    '''
+    # convert to lowercase and replace punctuation with spaces
+    removed_punctuation = punctuation_re.sub(" ", text.lower())
+
+    # split on whitespace
+    tokens = removed_punctuation.split()
+
+    # filter to ASCII only
+    def is_token_ascii(token):
+        return all(ord(c) < 128 for c in token)
+    
+    return [t for t in tokens if is_token_ascii(t)]
+
+def update_postings_buffer(term_frequency_map, doc_id):
+    '''
+    Update the global postings buffer and document frequency map with terms from the current document.
+    '''
+    global postings_buffer
+    global doc_frequency_map
+
+    for term, frequency in term_frequency_map.items():
+
+        # Append (term, docID, freq) to postings buffer
+        postings_buffer.append((term, doc_id, frequency))
+
+        # doc frequency increments once per (term, doc)
+        doc_frequency_map[term] = doc_frequency_map.get(term, 0) + 1
+
+def write_postings_buffer_to_disk(temp_file_index, temp_file_prefix):
+    global postings_buffer, temp_file_names
+
+    postings_buffer.sort(key=lambda p: (p[0], p[1]))
+    os.makedirs(os.path.dirname(temp_file_prefix) or ".", exist_ok=True)
+
+    temp_file_name = f"{temp_file_prefix}{temp_file_index}.txt"
+    count = len(postings_buffer)
+
+    with open(temp_file_name, "w", encoding="utf-8") as f:
+        for term, docID, freq in postings_buffer:
+            f.write(f"{term}\t{docID}\t{freq}\n")
+
+    temp_file_names.append(temp_file_name)
+    postings_buffer.clear()
+    print(f"[INFO] Wrote {temp_file_name} with {count} postings.")
+
+def save_document_frequencies(doc_freq_file):
+    '''
+    Save the document frequency map to a file.
+    '''
+    global doc_frequency_map
+
+    # ensure directory exists
+    os.makedirs(os.path.dirname(doc_freq_file) or ".", exist_ok=True)
+
+    # write to file
+    with open(doc_freq_file, "w", encoding="utf-8") as f:
+        for term, document_frequency in doc_frequency_map.items():
+            f.write(f"{term} {document_frequency}\n")
+
+def save_document_lengths(doc_lengths_file):
+    '''
+    Save the document lengths to a file.'''
+    # ensure directory exists
+    os.makedirs(os.path.dirname(doc_lengths_file) or ".", exist_ok=True)
+
+    # write to file
+    with open(doc_lengths_file, "w", encoding="utf-8") as f:
+        for doc_id, length in document_lengths.items():
+            f.write(f"{doc_id} {length}\n")
+
+def save_collection_stats(stats_file):
+    global total_documents, total_document_length
+    os.makedirs(os.path.dirname(stats_file) or ".", exist_ok=True)
+    avg_len = (total_document_length / total_documents) if total_documents else 0.0
+    with open(stats_file, "w", encoding="utf-8") as f:
+        f.write(f"{total_documents}\t{avg_len}\n")
+
+def save_page_table(page_table_file):
+    '''
+    Save the page table (docID to passageID mapping) to a file.
+    '''
+    # ensure directory exists
+    os.makedirs(os.path.dirname(page_table_file) or ".", exist_ok=True)
+
+    # write to file
+    with open(page_table_file, "w", encoding="utf-8") as f:
+        for doc_id, name in page_table.items():
+            f.write(f"{doc_id} {name}\n")
+
+def parse_data(file_path, temp_file_prefix, max_buffer_postings = DEFAULT_MAX_BUFFER_POSTINGS, outputs_dir = "tmp"):
+    '''
+    Parse the input TSV file and build temporary postings files and auxiliary statistics files using the specified parameters.
+    '''
+    global total_documents
+    global total_document_length
+    global postings_buffer
+    global page_table
+    global document_lengths
+
+    # Check if file exists
+    if not os.path.exists(file_path):
+        print(f"Error opening file at path {file_path}", file=sys.stderr)
+        return
+
+    # Ensure output directory exists
+    os.makedirs(outputs_dir, exist_ok=True)
+
+    # Initialize variables
+    temp_file_index = 0
+    doc_id = 0
+
+    # Read and process the input file line by line
+    with open(file_path, "r", encoding="utf-8") as opened_file:
+        for line in opened_file:
+            # Remove trailing newline
+            line = line.rstrip("\n")
+
+            # Skip empty lines
+            if not line:
+                continue
+            
+            # Increment total document count
+            total_documents += 1
+
+            # Split on first tab into passageID and text
+            parts = line.split("\t", maxsplit=1)
+
+            passage_id = parts[0]
+            passage_text = parts[1] if len(parts) > 1 else ""
+
+            # Update page table
+            page_table[doc_id] = passage_id
+
+            # Tokenize passage text
+            tokens = tokenize_text(passage_text)
+            doc_len = len(tokens)
+            
+            # Update document lengths and total document length
+            document_lengths[doc_id] = doc_len
+            total_document_length += doc_len
+
+            term_freq = {}
+            for token in tokens:
+                # Count term frequencies in the document
+                term_freq[token] = term_freq.get(token, 0) + 1
+
+            update_postings_buffer(term_freq, doc_id)
+
+            # spill if buffer (by count) exceeds threshold
+            if len(postings_buffer) >= max_buffer_postings:
+                # spill to disk
+                temp_file_index += 1
+                write_postings_buffer_to_disk(temp_file_index, temp_file_prefix)
+
+            # Increment document ID
+            doc_id += 1
+
+    # spill remaining postings
+    if postings_buffer:
+        temp_file_index += 1
+        write_postings_buffer_to_disk(temp_file_index, temp_file_prefix)
+
+    # write aux files
+    save_document_frequencies(os.path.join(outputs_dir, "doc_frequencies.txt"))
+    save_document_lengths(os.path.join(outputs_dir, "document_lengths.txt"))
+    save_collection_stats(os.path.join(outputs_dir, "collection_stats.txt"))
+    save_page_table(os.path.join(outputs_dir, "page_table.txt"))
+    print("Completed parsing.")
+
+def argument_parser():
+    '''
+    Create the command line argument parser.
+    '''
+    parser = argparse.ArgumentParser(description="Build temp postings and stats from TSV corpus.")
+    parser.add_argument("input", help="Path to TSV with lines: <passageID>\\t<passageText>")
+    parser.add_argument("--prefix", default="tmp/run_", help="Temp postings file prefix, e.g. tmp/run_")
+    parser.add_argument("--buffer", type=int, default=DEFAULT_MAX_BUFFER_POSTINGS, help="Max postings in RAM before spilling a sorted run")
+    parser.add_argument("--outdir", default="tmp", help="Directory for stats files")
+    return parser
+
+if __name__ == "__main__":
+    # parse command line arguments
+    args = argument_parser().parse_args()
+
+    # Paerse the data
+    parse_data(args.input, args.prefix, max_buffer_postings=args.buffer, outputs_dir=args.outdir)
