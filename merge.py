@@ -23,42 +23,56 @@ def varbyte_encode(number: int) -> bytes:
 
 
 def merge_inverted_indexes(index_files: List[str], output_index_file: str, output_lexicon_file: str, block_size: int = 128):
+    '''
+    Merge multiple sorted posting files into a single compressed inverted index and lexicon.
+    '''
+
     # Open all temporary posting files
     input_files = []
     for path in index_files:
-        f = open(path, "r", encoding="utf-8")
-        input_files.append(f)
+        file = open(path, "r", encoding="utf-8")
+        input_files.append(file)
 
     # Heap entries: (term, docID, freq, fileIndex)
     heap = []
 
     # Read first posting from each file
-    for i, f in enumerate(input_files):
-        line = f.readline()
+    for idx, file in enumerate(input_files):
+        line = file.readline()
+
+        # skip empty lines
         if not line:
             continue
+
+        # parse line
         parts = line.rstrip("\n").split()
+
+        # skip malformed lines
         if len(parts) < 3:
             continue
+        
         term = parts[0]
-        try:
-            docID = int(parts[1])
-            freq = int(parts[2])
-        except ValueError:
-            continue
-        heapq.heappush(heap, (term, docID, freq, i))
+        docID = int(parts[1])
+        freq = int(parts[2])
+
+        # push to heap
+        heapq.heappush(heap, (term, docID, freq, idx))
 
     # Prepare output files
     os.makedirs(os.path.dirname(output_index_file) or ".", exist_ok=True)
     out_file = open(output_index_file, "wb")
+
     os.makedirs(os.path.dirname(output_lexicon_file) or ".", exist_ok=True)
     lexicon_out = open(output_lexicon_file, "w", encoding="utf-8")
 
+    # Variables to track current term postings
     current_term = None
     docIDs = []
     freqs = []
 
+    # Merge process
     while heap:
+        # Get smallest term posting
         term, docID, freq, file_idx = heapq.heappop(heap)
 
         # If we've moved to a new term, flush previous
@@ -173,18 +187,24 @@ def _write_term_postings(out_file, lexicon_out, term: str, docIDs: List[int], fr
 
 
 def argument_parser():
-    p = argparse.ArgumentParser(description="Merge sorted posting runs into a compressed inverted index and lexicon.")
-    p.add_argument('--inputs', required=True, help='Glob pattern for input run files, e.g. "tmp/run_*.txt"')
-    p.add_argument('--output-index', default='tmp/index.bin', help='Output binary index file')
-    p.add_argument('--output-lexicon', default='tmp/lexicon.txt', help='Output lexicon (text) file')
-    p.add_argument('--block-size', type=int, default=128, help='Number of postings per block')
-    return p
+    parser = argparse.ArgumentParser(description="Merge sorted posting runs into a compressed inverted index and lexicon.")
+    parser.add_argument('--inputs', required=True, help='Glob pattern for input run files, e.g. "tmp/run_*.txt"')
+    parser.add_argument('--output-index', default='output/index.bin', help='Output binary index file')
+    parser.add_argument('--output-lexicon', default='output/lexicon.txt', help='Output lexicon (text) file')
+    parser.add_argument('--block-size', type=int, default=128, help='Number of postings per block')
+    return parser
 
 
 if __name__ == '__main__':
+    # Parse arguments
     args = argument_parser().parse_args()
+
+    # Find input files
     files = sorted(glob.glob(args.inputs))
+
+    # Check if any files found
     if not files:
-        print(f"No input files matched pattern: {args.inputs}")
+        print(f"No input files matched pattern provided: {args.inputs}")
         raise SystemExit(1)
+    
     merge_inverted_indexes(files, args.output_index, args.output_lexicon, block_size=args.block_size)
