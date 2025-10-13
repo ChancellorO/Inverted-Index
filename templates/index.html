@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Search Engine</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(to bottom, #ffffff 0%, #f8f9fa 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+        
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 50px;
+        }
+        
+        .header h1 {
+            font-size: 42px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .header p {
+            font-size: 15px;
+            color: #8e8e93;
+            font-weight: 400;
+        }
+        
+        .mode-selector {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            margin-bottom: 20px;
+            background: #f5f5f7;
+            padding: 4px;
+            border-radius: 12px;
+            width: fit-content;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        
+        .mode-selector label {
+            color: #8e8e93;
+            padding: 10px 32px;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+        }
+        
+        .mode-selector input[type="radio"] {
+            display: none;
+        }
+        
+        .mode-selector label:has(input:checked) {
+            background: white;
+            color: #667eea;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.08);
+        }
+        
+        .search-container {
+            position: relative;
+            margin-bottom: 40px;
+        }
+        
+        .search-box {
+            background: white;
+            border-radius: 16px;
+            padding: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+            display: flex;
+            align-items: center;
+            border: 2px solid transparent;
+            transition: all 0.3s ease;
+        }
+        
+        .search-box:focus-within {
+            border-color: #667eea;
+            box-shadow: 0 8px 30px rgba(102, 126, 234, 0.15);
+        }
+        
+        .search-icon {
+            padding: 0 12px;
+            color: #8e8e93;
+            font-size: 20px;
+        }
+        
+        .search-box input {
+            border: none;
+            outline: none;
+            flex: 1;
+            font-size: 16px;
+            padding: 14px 8px;
+            background: transparent;
+            color: #1d1d1f;
+        }
+        
+        .search-box input::placeholder {
+            color: #8e8e93;
+        }
+        
+        .search-box button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 14px 32px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 15px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        .search-box button:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+        }
+        
+        .search-box button:active {
+            transform: translateY(0);
+        }
+        
+        .results {
+            background: white;
+            border-radius: 16px;
+            padding: 28px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+        }
+        
+        .results-header {
+            margin-bottom: 24px;
+            padding-bottom: 16px;
+            border-bottom: 1px solid #f5f5f7;
+        }
+        
+        .results-header h2 {
+            color: #1d1d1f;
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+        
+        .results-header p {
+            color: #8e8e93;
+            font-size: 14px;
+        }
+        
+        .result-item {
+            padding: 20px;
+            margin-bottom: 16px;
+            background: linear-gradient(to right, #f9f9fb 0%, #ffffff 100%);
+            border-radius: 12px;
+            border: 1px solid #f0f0f3;
+            transition: all 0.3s ease;
+        }
+        
+        .result-item:hover {
+            border-color: #667eea;
+            background: white;
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.1);
+        }
+        
+        .result-header {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 12px;
+        }
+        
+        .result-rank {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            min-width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 15px;
+            box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+        
+        .result-meta {
+            flex: 1;
+        }
+        
+        .result-id {
+            font-size: 15px;
+            color: #1d1d1f;
+            font-weight: 600;
+            margin-bottom: 4px;
+        }
+        
+        .result-score {
+            color: #8e8e93;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        
+        .result-snippet {
+            color: #4a4a4a;
+            font-size: 14px;
+            line-height: 1.6;
+            padding: 12px 16px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 3px solid #667eea;
+        }
+        
+        .result-snippet strong {
+            font-weight: 700;
+            color: #1d1d1f;
+        }
+        
+        .no-results {
+            text-align: center;
+            padding: 50px 20px;
+            color: #8e8e93;
+            font-size: 15px;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 50px 20px;
+            color: #667eea;
+            font-size: 15px;
+            font-weight: 500;
+        }
+        
+        .loading::after {
+            content: '...';
+            animation: dots 1.5s infinite;
+        }
+        
+        @keyframes dots {
+            0%, 20% { content: '.'; }
+            40% { content: '..'; }
+            60%, 100% { content: '...'; }
+        }
+        
+        .error {
+            background: linear-gradient(to right, #fff5f5 0%, #ffffff 100%);
+            color: #e53e3e;
+            padding: 16px 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            border-left: 4px solid #e53e3e;
+            font-size: 14px;
+            font-weight: 500;
+            box-shadow: 0 2px 8px rgba(229, 62, 62, 0.1);
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        @media (max-width: 640px) {
+            .header h1 {
+                font-size: 32px;
+            }
+            
+            .search-box button {
+                padding: 14px 20px;
+                font-size: 14px;
+            }
+            
+            .mode-selector label {
+                padding: 10px 24px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Search</h1>
+            <p>Web Search Engines - Document Retrieval for MS MACRO passage-ranking dataset</p>
+        </div>
+        
+        <div class="mode-selector">
+            <label>
+                <input type="radio" name="mode" value="OR" checked>
+                <span>OR</span>
+            </label>
+            <label>
+                <input type="radio" name="mode" value="AND">
+                <span>AND</span>
+            </label>
+        </div>
+        
+        <div class="search-container">
+            <div class="search-box">
+                <div class="search-icon">🔍</div>
+                <input type="text" id="searchInput" placeholder="Search documents..." onkeypress="handleKeyPress(event)">
+                <button onclick="performSearch()">Search</button>
+            </div>
+        </div>
+        
+        <div id="errorMessage" class="error hidden"></div>
+        
+        <div id="resultsContainer" class="results hidden">
+            <div class="results-header">
+                <h2>Results</h2>
+                <p id="resultsInfo"></p>
+            </div>
+            <div id="resultsList"></div>
+        </div>
+        
+        <div id="loadingMessage" class="loading hidden">Searching</div>
+    </div>
+
+    <script>
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                performSearch();
+            }
+        }
+        
+        function getSelectedMode() {
+            return document.querySelector('input[name="mode"]:checked').value;
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            errorDiv.textContent = message;
+            errorDiv.classList.remove('hidden');
+        }
+        
+        function hideError() {
+            document.getElementById('errorMessage').classList.add('hidden');
+        }
+        
+        function showLoading() {
+            document.getElementById('loadingMessage').classList.remove('hidden');
+            document.getElementById('resultsContainer').classList.add('hidden');
+        }
+        
+        function hideLoading() {
+            document.getElementById('loadingMessage').classList.add('hidden');
+        }
+        
+        function formatSnippet(snippet) {
+            // Convert markdown bold (**text**) to HTML strong tags
+            return snippet.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+        }
+        
+        async function performSearch() {
+            const query = document.getElementById('searchInput').value.trim();
+            
+            if (!query) {
+                showError('Please enter a search query');
+                return;
+            }
+            
+            hideError();
+            showLoading();
+            
+            const mode = getSelectedMode();
+            
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        query: query,
+                        mode: mode
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (!response.ok) {
+                    throw new Error(data.error || 'Search failed');
+                }
+                
+                displayResults(data);
+            } catch (error) {
+                showError('Error: ' + error.message);
+            } finally {
+                hideLoading();
+            }
+        }
+        
+        function displayResults(data) {
+            const resultsContainer = document.getElementById('resultsContainer');
+            const resultsInfo = document.getElementById('resultsInfo');
+            const resultsList = document.getElementById('resultsList');
+            
+            resultsInfo.textContent = `${data.total} results for "${data.query}" (${data.mode})`;
+            
+            if (data.results.length === 0) {
+                resultsList.innerHTML = '<div class="no-results">No results found</div>';
+            } else {
+                resultsList.innerHTML = data.results.map(result => `
+                    <div class="result-item">
+                        <div class="result-header">
+                            <div class="result-rank">${result.rank}</div>
+                            <div class="result-meta">
+                                <div class="result-id">${result.passage_id}</div>
+                                <div class="result-score">Score: ${result.score}</div>
+                            </div>
+                        </div>
+                        ${result.snippet ? `<div class="result-snippet">${formatSnippet(result.snippet)}</div>` : ''}
+                    </div>
+                `).join('');
+            }
+            
+            resultsContainer.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
