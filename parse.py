@@ -2,6 +2,7 @@ import os
 import re
 import sys
 import argparse
+import struct
 
 # Global Variables
 postings_buffer = []
@@ -110,6 +111,46 @@ def save_page_table(page_table_file):
         for doc_id, name in page_table.items():
             f.write(f"{doc_id} {name}\n")
 
+def save_document_store(doc_store_file, doc_offsets_file, file_path):
+    '''
+    Build document store with offset-based indexing for efficient retrieval.
+    '''
+    os.makedirs(os.path.dirname(doc_store_file) or ".", exist_ok=True)
+    os.makedirs(os.path.dirname(doc_offsets_file) or ".", exist_ok=True)
+    
+    offsets = {}
+    
+    with open(doc_store_file, 'wb') as out_f:
+        with open(file_path, 'r', encoding='utf-8') as in_f:
+            doc_id = 0
+            for line in in_f:
+                line = line.rstrip('\n')
+                if not line:
+                    continue
+                
+                parts = line.split('\t', maxsplit=1)
+                passage_text = parts[1] if len(parts) > 1 else ""
+                
+                # Record offset before writing
+                offset = out_f.tell()
+                
+                # Encode and write
+                text_bytes = passage_text.encode('utf-8')
+                length = len(text_bytes)
+                
+                out_f.write(struct.pack('<Q', length))
+                out_f.write(text_bytes)
+                
+                offsets[doc_id] = (offset, length)
+                doc_id += 1
+    
+    # Write offset index
+    with open(doc_offsets_file, 'w') as f:
+        for doc_id, (offset, length) in sorted(offsets.items()):
+            f.write(f"{doc_id}\t{offset}\t{length}\n")
+    
+    print(f"[INFO] Document store created with {len(offsets)} documents.")
+
 def parse_data(file_path, temp_file_prefix, max_buffer_postings = DEFAULT_MAX_BUFFER_POSTINGS, outputs_dir = "tmp"):
     '''
     Parse the input TSV file and build temporary postings files and auxiliary statistics files using the specified parameters.
@@ -188,6 +229,11 @@ def parse_data(file_path, temp_file_prefix, max_buffer_postings = DEFAULT_MAX_BU
     save_document_lengths(os.path.join(outputs_dir, "document_lengths.txt"))
     save_collection_stats(os.path.join(outputs_dir, "collection_stats.txt"))
     save_page_table(os.path.join(outputs_dir, "page_table.txt"))
+    save_document_store(
+        os.path.join(outputs_dir, "documents.dat"),
+        os.path.join(outputs_dir, "doc_offsets.txt"),
+        file_path
+    )
     print("Completed parsing.")
 
 def argument_parser():
