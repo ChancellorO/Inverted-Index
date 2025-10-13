@@ -188,9 +188,9 @@ def _write_term_postings(out_file, lexicon_out, term: str, docIDs: List[int], fr
 
 def argument_parser():
     parser = argparse.ArgumentParser(description="Merge sorted posting runs into a compressed inverted index and lexicon.")
-    parser.add_argument('--inputs', required=True, help='Glob pattern for input run files, e.g. "tmp/run_*.txt"')
-    parser.add_argument('--output-index', default='output/index.bin', help='Output binary index file')
-    parser.add_argument('--output-lexicon', default='output/lexicon.txt', help='Output lexicon (text) file')
+    parser.add_argument('--inputs', required=True, help='Glob pattern for input run files, e.g. "tmp/temp_file_*.txt"')
+    parser.add_argument('--output-index', default='out/index.bin', help='Output binary index file')
+    parser.add_argument('--output-lexicon', default='out/lexicon.txt', help='Output lexicon (text) file')
     parser.add_argument('--block-size', type=int, default=128, help='Number of postings per block')
     return parser
 
