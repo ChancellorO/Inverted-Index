@@ -228,6 +228,9 @@
         }
         
         .result-snippet strong {
+            background: #ffeb3b;
+            padding: 2px 4px;
+            border-radius: 3px;
             font-weight: 700;
             color: #1d1d1f;
         }
@@ -294,7 +297,7 @@
     <div class="container">
         <div class="header">
             <h1>Search</h1>
-            <p>Web Search Engines - Document Retrieval for MS MACRO passage-ranking dataset</p>
+            <p>Modern Document Retrieval with Snippets</p>
         </div>
         
         <div class="mode-selector">
@@ -418,7 +421,7 @@
                         <div class="result-header">
                             <div class="result-rank">${result.rank}</div>
                             <div class="result-meta">
-                                <div class="result-id">${result.passage_id}</div>
+                                <div class="result-id">Document id: ${result.passage_id}</div>
                                 <div class="result-score">Score: ${result.score}</div>
                             </div>
                         </div>
