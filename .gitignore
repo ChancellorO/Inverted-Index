@@ -1,0 +1,12 @@
+# Dataset
+collection.tsv
+tmp/
+
+# Environment directories
+venv/*
+.DS_Store
+
+
+# Ignore Python bytecode directories
+__pycache__/
+*.pyc
