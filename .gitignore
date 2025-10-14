@@ -1,6 +1,7 @@
 # Dataset
 collection.tsv
 tmp/
+out/
 
 # Environment directories
 venv/*
