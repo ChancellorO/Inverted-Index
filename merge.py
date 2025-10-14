@@ -21,7 +21,6 @@ def varbyte_encode(number: int) -> bytes:
             encoded.append(byte)
     return bytes(encoded)
 
-
 def merge_inverted_indexes(index_files: List[str], output_index_file: str, output_lexicon_file: str, block_size: int = 128):
     '''
     Merge multiple sorted posting files into a single compressed inverted index and lexicon.
@@ -114,7 +113,6 @@ def merge_inverted_indexes(index_files: List[str], output_index_file: str, outpu
 
     print("[INFO] Merged inverted index and lexicon generated successfully.")
 
-
 def _write_term_postings(out_file, lexicon_out, term: str, docIDs: List[int], freqs: List[int], block_size: int):
     """Write postings for a single term into out_file (binary) and append lexicon entry.
 
@@ -185,7 +183,6 @@ def _write_term_postings(out_file, lexicon_out, term: str, docIDs: List[int], fr
     # lexicon line: term offset length docFrequency
     lexicon_out.write(f"{term} {term_start_offset} {length} {doc_frequency}\n")
 
-
 def argument_parser():
     parser = argparse.ArgumentParser(description="Merge sorted posting runs into a compressed inverted index and lexicon.")
     parser.add_argument('--inputs', required=True, help='Glob pattern for input run files, e.g. "tmp/temp_file_*.txt"')
@@ -193,7 +190,6 @@ def argument_parser():
     parser.add_argument('--output-lexicon', default='out/lexicon.txt', help='Output lexicon (text) file')
     parser.add_argument('--block-size', type=int, default=128, help='Number of postings per block')
     return parser
-
 
 if __name__ == '__main__':
     # Parse arguments

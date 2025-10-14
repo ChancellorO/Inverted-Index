@@ -6,15 +6,13 @@ import struct
 
 # Global Variables
 postings_buffer = [] # List of (term, docID, freq) tuples in memory
-temp_file_names = [] # List of temporary postings file names
 page_table = {} # docID -> passageID
 doc_frequency_map = {} # term -> document frequency
 total_document_length = 0 # sum of all document lengths
 total_documents = 0 # total number of documents
 
 # Constants
-DEFAULT_MAX_BUFFER_POSTINGS = 1000000
-ASCII_RANGE = set(range(128))
+DEFAULT_MAX_BUFFER_POSTINGS = 5000000
 
 def tokenize_text(text):
     '''
@@ -55,7 +53,6 @@ def write_postings_buffer_to_disk(temp_file_index, temp_file_prefix):
     Write the current postings buffer to a temporary file on disk.
     '''
     global postings_buffer
-    global temp_file_names
 
     # sort postings buffer by (term, docID) not frequency
     postings_buffer.sort(key=lambda p: (p[0], p[1]))
@@ -70,9 +67,6 @@ def write_postings_buffer_to_disk(temp_file_index, temp_file_prefix):
     with open(temp_file_name, "w", encoding="utf-8") as f:
         for term, docID, freq in postings_buffer:
             f.write(f"{term}\t{docID}\t{freq}\n")
-
-    # record temp file name
-    temp_file_names.append(temp_file_name)
 
     # clear postings buffer
     postings_buffer.clear()
@@ -120,49 +114,9 @@ def save_page_table(page_table_file):
         for doc_id, length in page_table.items():
             f.write(f"{doc_id} {length}\n")
 
-def save_document_store(doc_store_file, doc_offsets_file, file_path):
-    '''
-    Build document store with offset-based indexing for efficient retrieval.
-    '''
-    os.makedirs(os.path.dirname(doc_store_file) or ".", exist_ok=True)
-    os.makedirs(os.path.dirname(doc_offsets_file) or ".", exist_ok=True)
-    
-    offsets = {}
-    
-    with open(doc_store_file, 'wb') as out_f:
-        with open(file_path, 'r', encoding='utf-8') as in_f:
-            doc_id = 0
-            for line in in_f:
-                line = line.rstrip('\n')
-                if not line:
-                    continue
-                
-                parts = line.split('\t', maxsplit=1)
-                passage_text = parts[1] if len(parts) > 1 else ""
-                
-                # Record offset before writing
-                offset = out_f.tell()
-                
-                # Encode and write
-                text_bytes = passage_text.encode('utf-8')
-                length = len(text_bytes)
-                
-                out_f.write(struct.pack('<Q', length))
-                out_f.write(text_bytes)
-                
-                offsets[doc_id] = (offset, length)
-                doc_id += 1
-    
-    # Write offset index
-    with open(doc_offsets_file, 'w') as f:
-        for doc_id, (offset, length) in sorted(offsets.items()):
-            f.write(f"{doc_id}\t{offset}\t{length}\n")
-    
-    print(f"[INFO] Document store created with {len(offsets)} documents.")
-
 def parse_data(file_path, temp_file_prefix, max_buffer_postings = DEFAULT_MAX_BUFFER_POSTINGS, outputs_dir = "tmp"):
     '''
-    Parse the input TSV file and build temporary postings files and auxiliary statistics files.
+    Parse the input TSV file and build temporary postings files and extra statistics files.
     '''
     global total_documents
     global total_document_length
@@ -176,6 +130,14 @@ def parse_data(file_path, temp_file_prefix, max_buffer_postings = DEFAULT_MAX_BU
 
     # Ensure output directory exists
     os.makedirs(outputs_dir, exist_ok=True)
+
+    # Prepare document store files for writing offsets
+    doc_store_path = os.path.join(outputs_dir, "documents.dat")
+    doc_offsets_path = os.path.join(outputs_dir, "doc_offsets.txt")
+
+    # Open document store for binary writes and offsets for text writes
+    doc_store_out = open(doc_store_path, 'wb')
+    doc_offsets_out = open(doc_offsets_path, 'w', encoding='utf-8')
 
     # Initialize variables
     temp_file_index = 0
@@ -201,6 +163,15 @@ def parse_data(file_path, temp_file_prefix, max_buffer_postings = DEFAULT_MAX_BU
 
             passage_id = parts[0]
             passage_text = parts[1] if len(parts) > 1 else ""
+
+            # Write document to the document store (record offset/length)
+            offset = doc_store_out.tell()
+            text_bytes = passage_text.encode('utf-8')
+            length = len(text_bytes)
+            doc_store_out.write(struct.pack('<Q', length))
+            doc_store_out.write(text_bytes)
+            # Write offsets incrementally to avoid storing them in memory
+            doc_offsets_out.write(f"{doc_id}\t{offset}\t{length}\n")
 
             # Tokenize passage text
             tokens = tokenize_text(passage_text)
@@ -242,11 +213,11 @@ def parse_data(file_path, temp_file_prefix, max_buffer_postings = DEFAULT_MAX_BU
     save_document_frequencies(os.path.join(outputs_dir, "doc_frequencies.txt"))
     save_collection_stats(os.path.join(outputs_dir, "collection_stats.txt"))
     save_page_table(os.path.join(outputs_dir, "page_table.txt"))
-    save_document_store(
-        os.path.join(outputs_dir, "documents.dat"),
-        os.path.join(outputs_dir, "doc_offsets.txt"),
-        file_path
-    )
+
+    # Close document store handlers
+    doc_store_out.close()
+    doc_offsets_out.close()
+
     print("1. Completed parsing stage.")
 
 def argument_parser():
