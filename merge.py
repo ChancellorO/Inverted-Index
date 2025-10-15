@@ -3,9 +3,8 @@ import glob
 import heapq
 import os
 import struct
-from typing import List
 
-def varbyte_encode(number: int) -> bytes:
+def varbyte_encode(number):
     """Variable-byte encode a non-negative integer and return bytes."""
     if number < 0:
         raise ValueError("varbyte_encode expects non-negative integers")
@@ -21,7 +20,7 @@ def varbyte_encode(number: int) -> bytes:
             encoded.append(byte)
     return bytes(encoded)
 
-def merge_inverted_indexes(index_files: List[str], output_index_file: str, output_lexicon_file: str, block_size: int = 128):
+def merge_inverted_indexes(index_files, output_index_file, output_lexicon_file, block_size = 128):
     '''
     Merge multiple sorted posting files into a single compressed inverted index and lexicon.
     '''
@@ -113,7 +112,7 @@ def merge_inverted_indexes(index_files: List[str], output_index_file: str, outpu
 
     print("[INFO] Merged inverted index and lexicon generated successfully.")
 
-def _write_term_postings(out_file, lexicon_out, term: str, docIDs: List[int], freqs: List[int], block_size: int):
+def _write_term_postings(out_file, lexicon_out, term, docIDs, freqs, block_size):
     """Write postings for a single term into out_file (binary) and append lexicon entry.
 
     Format (binary):
