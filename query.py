@@ -28,34 +28,25 @@ class InvertedList:
         self.index_file = index_file
         
         index_file.seek(start_offset)
-        self.raw_data = index_file.read(length)
+        term_size = struct.unpack('<Q', index_file.read(8))[0]
+        index_file.seek(term_size, 1)  # Skip term bytes
+        self.num_blocks = struct.unpack('<Q', index_file.read(8))[0]
         
-        offset = 0
-        term_size = struct.unpack('<Q', self.raw_data[offset:offset+8])[0]
-        offset += 8
-        offset += term_size
-        
-        self.num_blocks = struct.unpack('<Q', self.raw_data[offset:offset+8])[0]
-        offset += 8
-        
-        self.blocks = []
+        # Store block locations WITHOUT reading data
+        self.block_metadata = []
         for _ in range(self.num_blocks):
-            docIDs_size = struct.unpack('<Q', self.raw_data[offset:offset+8])[0]
-            offset += 8
-            freqs_size = struct.unpack('<Q', self.raw_data[offset:offset+8])[0]
-            offset += 8
-            
-            docIDs_data = self.raw_data[offset:offset+docIDs_size]
-            offset += docIDs_size
-            freqs_data = self.raw_data[offset:offset+freqs_size]
-            offset += freqs_size
-            
-            self.blocks.append({
-                'docIDs_data': docIDs_data,
-                'freqs_data': freqs_data,
+            block_start = index_file.tell()
+            docIDs_size = struct.unpack('<Q', index_file.read(8))[0]
+            freqs_size = struct.unpack('<Q', index_file.read(8))[0]
+            self.block_metadata.append({
+                'offset': block_start,
+                'docIDs_size': docIDs_size,
+                'freqs_size': freqs_size,
                 'decompressed_docIDs': None,
                 'decompressed_freqs': None
             })
+            # Skip the actual data
+            index_file.seek(docIDs_size + freqs_size, 1)
         
         self.current_block = -1
         self.current_index = -1
@@ -63,25 +54,33 @@ class InvertedList:
         self.current_freq = 0
     
     def _decompress_block(self, block_idx):
-        if self.blocks[block_idx]['decompressed_docIDs'] is not None:
+        block = self.block_metadata[block_idx]
+        
+        # Check if already decompressed
+        if block['decompressed_docIDs'] is not None:
             return
         
-        block = self.blocks[block_idx]
+        # NOW read from disk only when needed
+        self.index_file.seek(block['offset'] + 16)  # Skip the two size fields
+        docIDs_data = self.index_file.read(block['docIDs_size'])
+        freqs_data = self.index_file.read(block['freqs_size'])
         
+        # Decompress docIDs (with delta decoding)
         docIDs = []
         offset = 0
-        while offset < len(block['docIDs_data']):
-            val, offset = varbyte_decode_one(block['docIDs_data'], offset)
+        while offset < len(docIDs_data):
+            val, offset = varbyte_decode_one(docIDs_data, offset)
             docIDs.append(val)
         
         if docIDs:
             for i in range(1, len(docIDs)):
                 docIDs[i] += docIDs[i-1]
         
+        # Decompress freqs
         freqs = []
         offset = 0
-        while offset < len(block['freqs_data']):
-            val, offset = varbyte_decode_one(block['freqs_data'], offset)
+        while offset < len(freqs_data):
+            val, offset = varbyte_decode_one(freqs_data, offset)
             freqs.append(val)
         
         block['decompressed_docIDs'] = docIDs
@@ -92,24 +91,38 @@ class InvertedList:
             if self.current_block == -1:
                 self.current_block = 0
                 self.current_index = -1
+                self.current_offset = 0  # Track position in compressed data
             
-            self._decompress_block(self.current_block)
-            block = self.blocks[self.current_block]
+            block = self.block_metadata[self.current_block]
             
-            self.current_index += 1
-            while self.current_index < len(block['decompressed_docIDs']):
-                docID = block['decompressed_docIDs'][self.current_index]
-                if docID >= k:
-                    self.current_docID = docID
-                    self.current_freq = block['decompressed_freqs'][self.current_index]
-                    return docID
-                self.current_index += 1
+            # Decompress ONE docID at a time during traversal
+            if not hasattr(self, 'current_offset') or self.current_offset == 0:
+                # Load compressed data only when entering new block
+                self.index_file.seek(block['offset'] + 16)
+                self.compressed_docIDs = self.index_file.read(block['docIDs_size'])
+                self.compressed_freqs = self.index_file.read(block['freqs_size'])
+                self.current_offset = 0
+                self.freq_offset = 0
+                self.last_docID = 0
             
+            # Decode one docID at a time
+            while self.current_offset < len(self.compressed_docIDs):
+                delta, self.current_offset = varbyte_decode_one(self.compressed_docIDs, self.current_offset)
+                self.last_docID += delta
+                
+                freq, self.freq_offset = varbyte_decode_one(self.compressed_freqs, self.freq_offset)
+                
+                if self.last_docID >= k:
+                    self.current_docID = self.last_docID
+                    self.current_freq = freq
+                    return self.last_docID
+            
+            # Move to next block
             self.current_block += 1
-            self.current_index = -1
+            self.current_offset = 0
         
         return float('inf')
-    
+        
     def getFreq(self):
         return self.current_freq
 
@@ -259,7 +272,7 @@ class QueryProcessor:
         
         return ' '.join(snippets)
     
-    def disjunctive_query(self, query_terms, k=10, with_snippets=False):
+    def disjunctive_query(self, query_terms, k=100, with_snippets=False):
         lists = []
         for term in query_terms:
             inv_list = self.openList(term)
@@ -311,7 +324,7 @@ class QueryProcessor:
         else:
             return [(docID, score) for docID, score in top_k]
     
-    def conjunctive_query(self, query_terms, k=10, with_snippets=False):
+    def conjunctive_query(self, query_terms, k=100, with_snippets=False):
         lists = []
         for term in query_terms:
             inv_list = self.openList(term)
@@ -414,9 +427,9 @@ def run_web(qp):
         terms = query_text.split()
         
         if mode == 'OR':
-            results = qp.disjunctive_query(terms, k=10, with_snippets=True)
+            results = qp.disjunctive_query(terms, k=100, with_snippets=True)
         elif mode == 'AND':
-            results = qp.conjunctive_query(terms, k=10, with_snippets=True)
+            results = qp.conjunctive_query(terms, k=100, with_snippets=True)
         else:
             return jsonify({'error': 'Invalid mode'}), 400
         
