@@ -160,17 +160,21 @@ def write_postings(out_file, lexicon_out, term, docIDs, freqs, block_size):
         for block_freq in block_freqs:
             encoded_freqs.extend(varbyte_encode(block_freq))
         
-        # get sizes for docIDs and freqs
-        docIDs_size = len(encoded_docIDs)
-        freqs_size = len(encoded_freqs)
+    # get sizes for docIDs and freqs
+    docIDs_size = len(encoded_docIDs)
+    freqs_size = len(encoded_freqs)
+    
+    # Write maxDocID so readers can skip blocks cheaply (8 bytes)
+    max_docID = block_docIDs[-1] if block_docIDs else 0
+    out_file.write(struct.pack('<Q', max_docID))
 
-        # Write sizes and encoded data
-        out_file.write(struct.pack('<Q', docIDs_size))
-        out_file.write(struct.pack('<Q', freqs_size))
+    # Write sizes and encoded data
+    out_file.write(struct.pack('<Q', docIDs_size))
+    out_file.write(struct.pack('<Q', freqs_size))
 
-        # write encoded data
-        out_file.write(bytes(encoded_docIDs))
-        out_file.write(bytes(encoded_freqs))
+    # write encoded data
+    out_file.write(bytes(encoded_docIDs))
+    out_file.write(bytes(encoded_freqs))
 
     # record end offset
     new_offset = out_file.tell()
