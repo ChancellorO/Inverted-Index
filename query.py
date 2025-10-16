@@ -3,6 +3,7 @@ import struct
 import heapq
 import argparse
 import os
+import math 
 
 def varbyte_decode_one(data, offset):
     """Decode one varbyte integer from data starting at offset."""
@@ -223,11 +224,11 @@ class QueryProcessor:
         ft = doc_freq_term
         K = k1 * ((1 - b) + b * (doc_len / self.avg_doc_len))
         
-        idf = ((N - ft + 0.5) / (ft + 0.5))
+        idf = math.log((N - ft + 0.5) / (ft + 0.5))
         if idf <= 0:
             idf = 0.01
         
-        score = ((term_freq * (k1 + 1)) / (term_freq + K)) * (idf if idf > 0 else 0)
+        score = ((term_freq * (k1 + 1)) / (term_freq + K)) * idf
         return score
 
     def generate_snippet(self, text, query_terms, window_size=50, max_snippets=2):
