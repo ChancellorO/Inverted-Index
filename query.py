@@ -388,31 +388,38 @@ class QueryProcessor:
 def run_cli(qp):
     print("Query Processor Ready. Type 'quit' to exit.")
     print("Commands: OR <terms> | AND <terms>")
-    
+
     while True:
         query = input("\nQuery> ").strip()
         if query.lower() == 'quit':
             break
-        
+
         parts = query.split(maxsplit=1)
         if len(parts) < 2:
             print("Usage: OR term1 term2 ... | AND term1 term2 ...")
             continue
-        
+
         mode = parts[0].upper()
         terms = parts[1].lower().split()
-        
+
+        # Ask for the number of results
+        try:
+            k = int(input("Enter the number of results to display: ").strip())
+        except ValueError:
+            print("Invalid number. Using default (100).")
+            k = 100
+
         # Start timing
         start_time = time.time()
 
         if mode == 'OR':
-            results = qp.disjunctive_query(terms)
+            results = qp.disjunctive_query(terms, k=k)
         elif mode == 'AND':
-            results = qp.conjunctive_query(terms)
+            results = qp.conjunctive_query(terms, k=k)
         else:
             print("Unknown mode. Use OR or AND")
             continue
-        
+
         # End timing
         end_time = time.time()
         elapsed_time = end_time - start_time
@@ -426,37 +433,38 @@ def run_cli(qp):
 
 def run_web(qp):
     from flask import Flask, render_template, request, jsonify
-    
+
     app = Flask(__name__)
-    
+
     @app.route('/')
     def home():
         return render_template('index.html')
-    
+
     @app.route('/search', methods=['POST'])
     def search():
         data = request.json
         query_text = data.get('query', '').strip().lower()
         mode = data.get('mode', 'OR').upper()
-        
+        k = int(data.get('results', 100))  # Default to 100 results if not provided
+
         if not query_text:
             return jsonify({'error': 'Empty query'}), 400
-        
+
         terms = query_text.split()
         # Start timing
         start_time = time.time()
-        
+
         if mode == 'OR':
-            results = qp.disjunctive_query(terms, k=100, with_snippets=True)
+            results = qp.disjunctive_query(terms, k=k, with_snippets=True)
         elif mode == 'AND':
-            results = qp.conjunctive_query(terms, k=100, with_snippets=True)
+            results = qp.conjunctive_query(terms, k=k, with_snippets=True)
         else:
             return jsonify({'error': 'Invalid mode'}), 400
-        
+
         # End timing
         end_time = time.time()
         elapsed_time = end_time - start_time
-        
+
         formatted_results = [
             {
                 'rank': i + 1,
@@ -466,15 +474,15 @@ def run_web(qp):
             }
             for i, (passage_id, score, snippet) in enumerate(results)
         ]
-        
+
         return jsonify({
             'query': query_text,
             'mode': mode,
             'results': formatted_results,
             'total': len(formatted_results),
-            'time_seconds': round(elapsed_time, 4)  # ← This line sends the time
+            'time_seconds': round(elapsed_time, 4)
         })
-    
+
     app.run(debug=True, port=5000)
 
 
@@ -488,14 +496,15 @@ def main():
     parser.add_argument('--page-table', default='out/page_table.txt')
     parser.add_argument('--doc-store', default='out/documents.dat')
     parser.add_argument('--doc-offsets', default='out/doc_offsets.txt')
+    parser.add_argument('--results', type=int, default=100, help='Number of results to display')
     args = parser.parse_args()
-    
+
     qp = QueryProcessor(
-        args.index, args.lexicon, args.doc_freq, 
-        args.stats, args.page_table, 
+        args.index, args.lexicon, args.doc_freq,
+        args.stats, args.page_table,
         args.doc_store, args.doc_offsets
     )
-    
+
     if args.mode == 'cli':
         run_cli(qp)
     else:

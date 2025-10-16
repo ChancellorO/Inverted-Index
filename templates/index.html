@@ -311,6 +311,11 @@
             </label>
         </div>
         
+        <div style="text-align: center; margin-bottom: 20px;">
+            <label style="color: #8e8e93; font-size: 14px; margin-right: 8px;">Top Results:</label>
+            <input type="number" id="resultsInput" placeholder="100" min="1" value="100" style="width: 80px; padding: 8px; border: 1px solid #e5e5e7; border-radius: 8px; text-align: center;">
+        </div>
+        
         <div class="search-container">
             <div class="search-box">
                 <div class="search-icon">🔍</div>
@@ -369,9 +374,15 @@
         
         async function performSearch() {
             const query = document.getElementById('searchInput').value.trim();
+            const results = parseInt(document.getElementById('resultsInput').value.trim(), 10);
             
             if (!query) {
                 showError('Please enter a search query');
+                return;
+            }
+            
+            if (!results || results <= 0) {
+                showError('Please enter a valid number of results');
                 return;
             }
             
@@ -388,7 +399,8 @@
                     },
                     body: JSON.stringify({
                         query: query,
-                        mode: mode
+                        mode: mode,
+                        results: results  // Add this line
                     })
                 });
                 
