@@ -32,14 +32,16 @@ class InvertedList:
         index_file.seek(term_size, 1)  # Skip term bytes
         self.num_blocks = struct.unpack('<Q', index_file.read(8))[0]
         
-        # Store block locations WITHOUT reading data
+        # Store block locations without reading data
         self.block_metadata = []
         for _ in range(self.num_blocks):
             block_start = index_file.tell()
+            max_docID = struct.unpack('<Q', index_file.read(8))[0]
             docIDs_size = struct.unpack('<Q', index_file.read(8))[0]
             freqs_size = struct.unpack('<Q', index_file.read(8))[0]
             self.block_metadata.append({
                 'offset': block_start,
+                'max_docID': max_docID,
                 'docIDs_size': docIDs_size,
                 'freqs_size': freqs_size,
                 'decompressed_docIDs': None,
@@ -61,7 +63,7 @@ class InvertedList:
             return
         
         # NOW read from disk only when needed
-        self.index_file.seek(block['offset'] + 16)  # Skip the two size fields
+        self.index_file.seek(block['offset'] + 24)  # Skip maxDocID (8 bytes) + two size fields (16 bytes)
         docIDs_data = self.index_file.read(block['docIDs_size'])
         freqs_data = self.index_file.read(block['freqs_size'])
         
@@ -91,35 +93,40 @@ class InvertedList:
             if self.current_block == -1:
                 self.current_block = 0
                 self.current_index = -1
-                self.current_offset = 0  # Track position in compressed data
+                # self.current_offset = 0  # Track position in compressed data
             
             block = self.block_metadata[self.current_block]
+
+            if k > block['max_docID']:
+                self.current_block += 1
+                continue
             
-            # Decompress ONE docID at a time during traversal
-            if not hasattr(self, 'current_offset') or self.current_offset == 0:
-                # Load compressed data only when entering new block
-                self.index_file.seek(block['offset'] + 16)
-                self.compressed_docIDs = self.index_file.read(block['docIDs_size'])
-                self.compressed_freqs = self.index_file.read(block['freqs_size'])
-                self.current_offset = 0
-                self.freq_offset = 0
-                self.last_docID = 0
+            # Decompress block only when needed
+            self._decompress_block(self.current_block)
             
-            # Decode one docID at a time
-            while self.current_offset < len(self.compressed_docIDs):
-                delta, self.current_offset = varbyte_decode_one(self.compressed_docIDs, self.current_offset)
-                self.last_docID += delta
-                
-                freq, self.freq_offset = varbyte_decode_one(self.compressed_freqs, self.freq_offset)
-                
-                if self.last_docID >= k:
-                    self.current_docID = self.last_docID
-                    self.current_freq = freq
-                    return self.last_docID
+            docIDs = block['decompressed_docIDs']
+            freqs = block['decompressed_freqs']
+            
+            # Binary search within block
+            left, right = 0, len(docIDs) - 1
+            result_idx = -1
+            
+            while left <= right:
+                mid = (left + right) // 2
+                if docIDs[mid] >= k:
+                    result_idx = mid
+                    right = mid - 1
+                else:
+                    left = mid + 1
+            
+            if result_idx != -1:
+                self.current_index = result_idx
+                self.current_docID = docIDs[result_idx]
+                self.current_freq = freqs[result_idx]
+                return self.current_docID
             
             # Move to next block
             self.current_block += 1
-            self.current_offset = 0
         
         return float('inf')
         
