@@ -4,6 +4,7 @@ import heapq
 import argparse
 import os
 import math 
+import time
 
 def varbyte_decode_one(data, offset):
     """Decode one varbyte integer from data starting at offset."""
@@ -401,6 +402,9 @@ def run_cli(qp):
         mode = parts[0].upper()
         terms = parts[1].lower().split()
         
+        # Start timing
+        start_time = time.time()
+
         if mode == 'OR':
             results = qp.disjunctive_query(terms)
         elif mode == 'AND':
@@ -409,6 +413,12 @@ def run_cli(qp):
             print("Unknown mode. Use OR or AND")
             continue
         
+        # End timing
+        end_time = time.time()
+        elapsed_time = end_time - start_time
+
+        print(f"Search Time ({elapsed_time:.4f} seconds):")
+
         print(f"\nTop {len(results)} results:")
         for i, (passage_id, score) in enumerate(results, 1):
             print(f"{i}. {passage_id} (score: {score:.4f})")
@@ -433,6 +443,8 @@ def run_web(qp):
             return jsonify({'error': 'Empty query'}), 400
         
         terms = query_text.split()
+        # Start timing
+        start_time = time.time()
         
         if mode == 'OR':
             results = qp.disjunctive_query(terms, k=100, with_snippets=True)
@@ -440,6 +452,10 @@ def run_web(qp):
             results = qp.conjunctive_query(terms, k=100, with_snippets=True)
         else:
             return jsonify({'error': 'Invalid mode'}), 400
+        
+        # End timing
+        end_time = time.time()
+        elapsed_time = end_time - start_time
         
         formatted_results = [
             {
@@ -455,7 +471,8 @@ def run_web(qp):
             'query': query_text,
             'mode': mode,
             'results': formatted_results,
-            'total': len(formatted_results)
+            'total': len(formatted_results),
+            'time_seconds': round(elapsed_time, 4)  # ← This line sends the time
         })
     
     app.run(debug=True, port=5000)

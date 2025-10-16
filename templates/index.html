@@ -411,7 +411,10 @@
             const resultsInfo = document.getElementById('resultsInfo');
             const resultsList = document.getElementById('resultsList');
             
-            resultsInfo.textContent = `${data.total} results for "${data.query}" (${data.mode})`;
+            // Display time if available
+            const timeInfo = data.time_seconds ? ` Search Time ${data.time_seconds} seconds` : '';
+            resultsInfo.innerHTML = `${timeInfo}<br>${data.total} results for "${data.query}" (${data.mode})`;
+
             
             if (data.results.length === 0) {
                 resultsList.innerHTML = '<div class="no-results">No results found</div>';
