@@ -4,25 +4,58 @@ import heapq
 import os
 import struct
 
-def varbyte_encode(number):
-    """Variable-byte encode a non-negative integer and return bytes."""
+def varbyte_encode(number: int) -> bytes:
+    """
+    Variable-byte encode a non-negative integer
+    """
     if number < 0:
         raise ValueError("varbyte_encode expects non-negative integers")
-    encoded = bytearray()
+    out = bytearray()
     while True:
-        byte = number & 0x7F
+        b = number & 0x7F
         number >>= 7
         if number == 0:
-            encoded.append(byte | 0x80)
+            out.append(b | 0x80)
             break
-        else:
-            encoded.append(byte)
-    return bytes(encoded)
+        out.append(b)
+    return bytes(out)
 
-def merge(temporary_files, output_index_file, output_lexicon_file, block_size = 128):
-    '''
+def delta_encode(sorted_ints):
+    """
+    Gap-encode a sorted, non-negative integer sequence.
+    """
+    if not sorted_ints:
+        return []
+    out = [sorted_ints[0]]
+    prev = sorted_ints[0]
+    for x in sorted_ints[1:]:
+        out.append(x - prev)
+        prev = x
+    return out
+
+def encode_docIDs(block_docIDs):
+    """
+    DocIDs first delta encoded then variable-byte encoded for each gap.
+    """
+    gaps = delta_encode(block_docIDs)
+    out = bytearray()
+    for g in gaps:
+        out.extend(varbyte_encode(g))
+    return bytes(out)
+
+def encode_freqs(block_freqs):
+    """
+    Frequencies with variable-byte encoding.
+    """
+    out = bytearray()
+    for f in block_freqs:
+        out.extend(varbyte_encode(f))
+    return bytes(out)
+
+def merge(temporary_files, output_index_file, output_lexicon_file, block_size=128):
+    """
     Merge multiple sorted posting files into a single compressed inverted index and lexicon.
-    '''
+    """
 
     # Open all temporary posting files
     temp_files = []
@@ -47,7 +80,6 @@ def merge(temporary_files, output_index_file, output_lexicon_file, block_size = 
         # skip malformed lines
         if len(parts) < 3:
             continue
-        
         term = parts[0]
         docID = int(parts[1])
         freq = int(parts[2])
@@ -115,9 +147,15 @@ def write_postings(out_file, lexicon_out, term, docIDs, freqs, block_size):
     """
     Write postings for a single term into index.bin and append metadata to the lexicon.txt
 
-    Format (binary): termSize (8 bytes), term bytes, numBlocks (8 bytes)
-    
-    Where each block is: docIDsSize (8 bytes), freqsSize (8 bytes unsigned), encodedDocIDs, encodedFreqs
+    File layout for a term (binary):
+      termSize (8 bytes), term bytes, numBlocks (8 bytes)
+
+      For each block:
+        maxDocID (8 bytes)            
+        docIDsSize (8 bytes)
+        freqsSize (8 bytes)
+        encodedDocIDs                  # VB of delta-encoded docIDs
+        encodedFreqs                   # VB of raw freqs (no delta)
 
     The lexicon line is: term startOffset length docFrequency (text)
     """
@@ -142,28 +180,15 @@ def write_postings(out_file, lexicon_out, term, docIDs, freqs, block_size):
         block_docIDs = docIDs[start:end]
         block_freqs = freqs[start:end]
 
-        # Delta Encoding
-        delta_docIDs = []
-        if block_docIDs:
-            prev = block_docIDs[0]
-            delta_docIDs.append(prev)
-            for d in block_docIDs[1:]:
-                delta_docIDs.append(d - prev)
-                prev = d
+        # Encode docIDs
+        encoded_docIDs = encode_docIDs(block_docIDs)
+        # Encode frequencies
+        encoded_freqs = encode_freqs(block_freqs)
 
-        # varbyte encode
-        encoded_docIDs = bytearray()
-        for delta_docID in delta_docIDs:
-            encoded_docIDs.extend(varbyte_encode(delta_docID))
-
-        encoded_freqs = bytearray()
-        for block_freq in block_freqs:
-            encoded_freqs.extend(varbyte_encode(block_freq))
-        
-        # get sizes for docIDs and freqs
+        # sizes
         docIDs_size = len(encoded_docIDs)
         freqs_size = len(encoded_freqs)
-        
+
         # Write maxDocID to help with skipping blocks during query processing
         max_docID = block_docIDs[-1] if block_docIDs else 0
         out_file.write(struct.pack('<Q', max_docID))
@@ -172,14 +197,14 @@ def write_postings(out_file, lexicon_out, term, docIDs, freqs, block_size):
         out_file.write(struct.pack('<Q', docIDs_size))
         out_file.write(struct.pack('<Q', freqs_size))
 
-        # write encoded data
-        out_file.write(bytes(encoded_docIDs))
-        out_file.write(bytes(encoded_freqs))
+        # Write encoded data
+        out_file.write(encoded_docIDs)
+        out_file.write(encoded_freqs)
 
-        # record end offset
+        # record end offset so far for this term
         new_offset = out_file.tell()
 
-        # calculate length and doc frequency
+        # calculate length and doc frequency for lexicon 
         length = new_offset - term_start_offset
         doc_frequency = len(docIDs)
 
@@ -205,5 +230,4 @@ if __name__ == '__main__':
     if not files:
         print(f"No input files matched pattern provided: {args.inputs}")
         raise SystemExit(1)
-    
     merge(files, args.output_index, args.output_lexicon, block_size=args.block_size)
