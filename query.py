@@ -356,6 +356,9 @@ class QueryProcessor:
         if not lists:
             return []
         
+        # Sort lists by document frequency (shortest first)
+        lists.sort(key=lambda inv_list: inv_list.doc_freq)
+        
         doc_scores = {}
         docIDs = [inv_list.nextGEQ(0) for inv_list in lists]
         
