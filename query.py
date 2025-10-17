@@ -5,6 +5,7 @@ import argparse
 import os
 import math 
 import time
+import re
 
 def varbyte_decode_one(data, offset):
     """Decode one varbyte integer from data starting at offset."""
@@ -231,17 +232,28 @@ class QueryProcessor:
         
         score = ((term_freq * (k1 + 1)) / (term_freq + K)) * idf
         return score
-
+        
     def generate_snippet(self, text, query_terms, window_size=50, max_snippets=2):
+
         words = text.split()
+        
+        def matches_query(word, query_terms):
+            """Check if word matches any query term"""
+            word_lower = word.lower()
+            # Replace special characters with spaces, then split into parts
+            word_parts = re.sub(r'[^a-z0-9]+', ' ', word_lower).split()
+            
+            for term in query_terms:
+                # Check if term matches any part
+                if term in word_parts:
+                    return True
+            
+            return False
         
         positions = []
         for i, word in enumerate(words):
-            word_lower = word.lower()
-            for term in query_terms:
-                if term in word_lower:
-                    positions.append(i)
-                    break
+            if matches_query(word, query_terms):
+                positions.append(i)
         
         if not positions:
             snippet = ' '.join(words[:window_size])
@@ -261,8 +273,7 @@ class QueryProcessor:
             
             highlighted = []
             for w in snippet_words:
-                w_lower = w.lower()
-                if any(term in w_lower for term in query_terms):
+                if matches_query(w, query_terms):
                     highlighted.append(f"**{w}**")
                 else:
                     highlighted.append(w)
