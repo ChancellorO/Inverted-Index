@@ -2,6 +2,7 @@
 collection.tsv
 tmp/
 out/
+data/
 
 # Environment directories
 venv/*
